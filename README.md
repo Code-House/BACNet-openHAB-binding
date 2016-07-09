@@ -14,7 +14,7 @@ Each BACNet endpoint is identified by a device instance ID, an object type and a
 
 e.g.
 
-`Switch reflectors_west_2 "Reflectors West Center" <reflector> (Reflector) {bacnet="device=701105,type=binaryValue,object=3"}`
+`Switch reflectors_west_2 "Reflectors West Center" <reflector> (Reflector) {bacnet="device=701105,type=binaryValue,id=3"}`
 
 The following keys are available:
 
