@@ -1,6 +1,6 @@
 # BACNet Binding for openHAB
 
-This binding provides basic access to BACNet devices for openHAB. It currently supports binary and analog value objects on BACNet devices.
+This binding provides basic access to BACNet devices for openHAB. This binding is based on [bacnet4j-wrapper](https://github.com/Code-House/bacnet4j-wrapper) and limited to it's basic abilities such reading and writing properties. Keep in mind that this is work in progress and even basic features can be broken.
 
 ## Installation
 
@@ -16,21 +16,28 @@ e.g.
 
 `Switch reflectors_west_2 "Reflectors West Center" <reflector> (Reflector) {bacnet="device=701105,type=binaryValue,object=3"}`
 
-The following _mandatory_ keys are available:
+The following keys are available:
 
-- `device` is the instance ID (integer) of the device as configured on your local network (it is *not* the IP address of the device)
-- `object`is the instance ID (integer) of the object you want to tie to this openHAB item
-- `type` is the object type. Available types are  `analogInput`, `analogOutput`, `analogValue`, `binaryInput`, `binaryOutput`, `binaryValue`
+* `device` is the instance ID (integer) of the device as configured on your local network (it is *not* the IP address of the device)
+* `type` is the object type. Available types are  `analogInput`, `analogOutput`, `analogValue`, `binaryInput`, `binaryOutput`, `binaryValue`
+* `id`is the instance ID (integer) of the object you want to tie to this openHAB item
 
-The following _optional_ keys are available:
+All these properties are coming from bacnet standard. If you don't know yet device id or available properties please contact your device manufacturer and ask for appropriate documentation. Source code contains class named `org.openhab.binding.bacnet.internal.util.DiscoveryMain` which drops all devices and available properties.
 
-- `readThrrottle` is the minimum number of time (in milliseconds) that the binding should wait between two property read requests to the device of this configuration.
-- `writeThrrottle` is the minimum number of time (in milliseconds) that the binding should wait between two property write requests to the device of this configuration.
+## Configuration options
+This binding have few basic options. Bold items are mandatory
+* **broadcast** - broadcast address used to discover devices
+* localBindAddress (default 0.0.0.0) - bind ip for local device, be aware that in some cases bacnet4j (used under the hood) doesn't work when this option is specified
+* port (default 47808)
+* localNetworkNumber (default 0) - bacnet network number
+* localDeviceId (default 1339) - device id used to identify openhab in bacnet network
+
+Currently binding will fetch all items every 30 seconds.
 
 ## How does it work?
 
-The binding uses BACNet/IP and sends out a broadcast discovery command on startup. All devices on the local network responding to the broadcast become available to the binding. The binding will continuously update endpoint values for all objects that are configured in your item files by issuing read property commands via BACNet. Sending commands/status updates will result in write property commands.
+The binding uses BACNet/IP and sends out a broadcast discovery command on startup. All devices on the local network responding to the broadcast become available to the binding. The binding will continuously update values for all objects that are configured in your item files by issuing read property commands via BACNet. Sending commands/status updates will result in write property commands.
 
 ### Development
 
-The item types "dimmer", "number" and "switch" have been tested. This binding is still in it's early development stage and might need many tweaks to work reliably in all cases!
+The item types "dimmer", "number" and "switch" have been tested. As said earlier this binding is still in it's early development stage and might need many tweaks to work reliably in all cases! Don't hesitate to report issues in this github project or ask on [openhab community forum](http://community.openhab.org). Just mention @splatch in your post to don't let me miss your message.
