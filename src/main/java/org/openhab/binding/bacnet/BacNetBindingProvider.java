@@ -10,11 +10,15 @@ package org.openhab.binding.bacnet;
 
 import java.util.Collection;
 
+import org.code_house.bacnet4j.wrapper.api.Type;
 import org.openhab.binding.bacnet.internal.BacNetBindingConfig;
 import org.openhab.core.binding.BindingProvider;
 
 public interface BacNetBindingProvider extends BindingProvider {
-	public BacNetBindingConfig configForItemName(String itemName);
-	public BacNetBindingConfig configForEndpoint(int deviceID, int endpointTypeID, int endpointID);
-	public Collection<BacNetBindingConfig> allConfigs();
+    public BacNetBindingConfig configForItemName(String itemName);
+
+    public BacNetBindingConfig configForEndpoint(int deviceId, Type type, int id);
+
+    public Collection<BacNetBindingConfig> allConfigs();
+
 }

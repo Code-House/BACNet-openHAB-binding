@@ -9,7 +9,8 @@
     http://www.eclipse.org/legal/epl-v10.html
 
 -->
-<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.1.0" name="org.openhab.binding.bacnet">
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.2.0" name="org.openhab.binding.bacnet" activate="activate" deactivate="deactivate" immediate="true">
+    
    <implementation class="org.openhab.binding.bacnet.internal.BacNetBinding"/>
    <service>
       <provide interface="org.osgi.service.cm.ManagedService" />
