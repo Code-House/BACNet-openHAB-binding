@@ -15,7 +15,6 @@ import org.code_house.bacnet4j.wrapper.api.Property;
 import org.code_house.bacnet4j.wrapper.ip.BacNetIpClient;
 import org.openhab.binding.bacnet.BacNetBindingProvider;
 import org.openhab.core.binding.AbstractActiveBinding;
-import org.openhab.core.binding.BindingProvider;
 import org.openhab.core.items.Item;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.types.Command;
@@ -37,7 +36,6 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
     private static final Integer DEFAULT_LOCAL_DEVICE_ID = 1339;
 
     private Map<Integer, Device> deviceMap = Collections.synchronizedMap(new HashMap<Integer, Device>());
-    private HashMap<BacNetBindingConfig, Encodable> lastUpdate = new HashMap<BacNetBindingConfig, Encodable>();
     private IpNetworkBuilder networkConfigurationBuilder;
     private BacNetClient client;
 
@@ -65,11 +63,6 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
     }
 
     @Override
-    public void bindingChanged(BindingProvider provider, String itemName) {
-        lastUpdate = new HashMap<BacNetBindingConfig, Encodable>();
-    }
-
-    @Override
     protected void internalReceiveUpdate(String itemName, State newState) {
         performUpdate(itemName, newState);
     }
@@ -91,7 +84,6 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
                             return BacNetValueConverter.openHabTypeToBacNetValue(config.type.getBacNetType(), newValue);
                         }
                     });
-                    lastUpdate.remove(config);
                 } catch (BacNetClientException e) {
                     logger.error("Could not set value {} for property {} for item {} (bacnet {}:{})", newValue,
                             endpoint, config.itemName, e);
@@ -120,6 +112,11 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
                         logger.error("Could not fetch property {} for item {} from bacnet", property, config.itemName,
                                 e);
                     }
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        logger.warn("Read task interrupted", e);
+                    }
                 }
             }
         }
@@ -127,7 +124,7 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
 
     @Override
     protected long getRefreshInterval() {
-        return TimeUnit.SECONDS.toMillis(30);
+        return TimeUnit.SECONDS.toMillis(150);
     }
 
     @Override
@@ -184,15 +181,10 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
         if (config == null || value == null) {
             return;
         }
-        Encodable oldValue = lastUpdate.get(config);
-        if (oldValue == null || !oldValue.equals(value)) {
-            state = this.createState(config.itemType, value);
-            eventPublisher.postUpdate(config.itemName, state);
-            lastUpdate.put(config, value);
-        } else {
-            logger.trace("Ignoring read result {} for item {} cause property {} value didn't change since last time",
-                    value, config.itemName, property);
-        }
+
+        state = this.createState(config.itemType, value);
+        eventPublisher.postUpdate(config.itemName, state);
+        logger.debug("Updating item {} to value {} throught property {}", config.itemName, value, property);
     }
 
     private State createState(Class<? extends Item> type, Encodable value) {
