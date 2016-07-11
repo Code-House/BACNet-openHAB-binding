@@ -4,16 +4,21 @@ import java.util.Collections;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.code_house.bacnet4j.wrapper.api.BacNetClient;
-import org.code_house.bacnet4j.wrapper.api.BacNetClientException;
 import org.code_house.bacnet4j.wrapper.api.Device;
 import org.code_house.bacnet4j.wrapper.api.DeviceDiscoveryListener;
 import org.code_house.bacnet4j.wrapper.api.JavaToBacNetConverter;
 import org.code_house.bacnet4j.wrapper.api.Property;
 import org.code_house.bacnet4j.wrapper.ip.BacNetIpClient;
 import org.openhab.binding.bacnet.BacNetBindingProvider;
+import org.openhab.binding.bacnet.internal.queue.ReadPropertyTask;
+import org.openhab.binding.bacnet.internal.queue.WritePropertyTask;
 import org.openhab.core.binding.AbstractActiveBinding;
 import org.openhab.core.items.Item;
 import org.openhab.core.library.types.StringType;
@@ -30,16 +35,28 @@ import com.serotonin.bacnet4j.npdu.ip.IpNetworkBuilder;
 import com.serotonin.bacnet4j.type.Encodable;
 
 public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
-        implements ManagedService, DeviceDiscoveryListener {
+        implements ManagedService, DeviceDiscoveryListener, PropertyValueReceiver<Encodable> {
     static final Logger logger = LoggerFactory.getLogger(BacNetBinding.class);
 
+    private static final Long DEFAULT_REFRESH_INTERVAL = 30000L;
     private static final Integer DEFAULT_LOCAL_DEVICE_ID = 1339;
+    private static final Long DEFAULT_DISCOVERY_TIMEOUT = 30000L;
+
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable r) {
+            return new Thread(r, "bacnet-binding-executor");
+        }
+    });
+
+    private final AtomicBoolean initialized = new AtomicBoolean(false);
 
     private Map<Integer, Device> deviceMap = Collections.synchronizedMap(new HashMap<Integer, Device>());
     private IpNetworkBuilder networkConfigurationBuilder;
     private BacNetClient client;
 
     private Integer localDeviceId = DEFAULT_LOCAL_DEVICE_ID;
+    private Long refreshInterval = DEFAULT_REFRESH_INTERVAL;
 
     @Override
     protected String getName() {
@@ -54,12 +71,14 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
 
     @Override
     public void deactivate() {
-        super.deactivate();
         logger.debug("Bacnet binding is going down");
         if (client != null) {
+            scheduler.shutdown();
             client.stop();
             client = null;
+            initialized.set(false);
         }
+        super.deactivate();
     }
 
     @Override
@@ -75,19 +94,17 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
     private void performUpdate(final String itemName, final Type newValue) {
         final BacNetBindingConfig config = configForItemName(itemName);
         if (config != null) {
-            Property endpoint = deviceEndpointForConfig(config);
-            if (endpoint != null) {
-                try {
-                    client.setPropertyValue(endpoint, newValue, new JavaToBacNetConverter<Type>() {
-                        @Override
-                        public Encodable toBacNet(Type java) {
-                            return BacNetValueConverter.openHabTypeToBacNetValue(config.type.getBacNetType(), newValue);
-                        }
-                    });
-                } catch (BacNetClientException e) {
-                    logger.error("Could not set value {} for property {} for item {} (bacnet {}:{})", newValue,
-                            endpoint, config.itemName, e);
-                }
+            Property property = devicePropertyForConfig(config);
+            if (property != null) {
+                scheduler.execute(
+                        new WritePropertyTask<Type>(client, property, newValue, new JavaToBacNetConverter<Type>() {
+                            @Override
+                            public Encodable toBacNet(Type java) {
+                                return BacNetValueConverter.openHabTypeToBacNetValue(config.type.getBacNetType(),
+                                        newValue);
+                            }
+                        }));
+                logger.info("Submited task to write {} value {} for item {}", property, newValue, itemName);
             }
         }
     }
@@ -102,29 +119,27 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
 
     @Override
     protected void execute() {
-        for (BacNetBindingProvider provider : providers) {
-            for (BacNetBindingConfig config : provider.allConfigs()) {
-                Property property = deviceEndpointForConfig(config);
-                if (property != null) {
-                    try {
-                        update(property);
-                    } catch (BacNetClientException e) {
-                        logger.error("Could not fetch property {} for item {} from bacnet", property, config.itemName,
-                                e);
-                    }
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        logger.warn("Read task interrupted", e);
+        if (!initialized.get()) {
+            logger.trace("Creating scheduled tasks to read bacnet properties");
+            for (BacNetBindingProvider provider : providers) {
+                for (BacNetBindingConfig config : provider.allConfigs()) {
+                    long refreshInterval = config.refreshInterval != 0 ? config.refreshInterval : getRefreshInterval();
+                    Property property = devicePropertyForConfig(config);
+                    if (property != null) {
+                        scheduler.scheduleAtFixedRate(new ReadPropertyTask(client, property, this), refreshInterval,
+                                refreshInterval, TimeUnit.MILLISECONDS);
+                        logger.debug("Scheduled read property task to fetch item {} value from {} every {}ms",
+                                config.itemName, property, refreshInterval);
                     }
                 }
             }
+            initialized.set(true);
         }
     }
 
     @Override
     protected long getRefreshInterval() {
-        return TimeUnit.SECONDS.toMillis(150);
+        return refreshInterval;
     }
 
     @Override
@@ -154,37 +169,39 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
             this.localDeviceId = Integer.parseInt((String) properties.get("localDeviceId"));
         } else {
             if (this.localDeviceId != DEFAULT_LOCAL_DEVICE_ID) {
-                localDeviceId = DEFAULT_LOCAL_DEVICE_ID; // reset to default from previous value
+                this.localDeviceId = DEFAULT_LOCAL_DEVICE_ID; // reset to default from previous value
             }
+        }
+
+        if (properties.get("refreshInterval") != null) {
+            this.refreshInterval = Long.parseLong((String) properties.get("refreshInterval"));
+        } else {
+            if (this.refreshInterval != DEFAULT_REFRESH_INTERVAL) {
+                this.refreshInterval = DEFAULT_REFRESH_INTERVAL; // reset to default from previous value
+            }
+        }
+
+        final long discoveryTimeout;
+        if (properties.get("discoveryTimeout") != null) {
+            discoveryTimeout = Long.parseLong((String) properties.get("discoveryTimeout"));
+        } else {
+            discoveryTimeout = DEFAULT_DISCOVERY_TIMEOUT;
         }
 
         client = new BacNetIpClient(networkConfigurationBuilder.build(), localDeviceId);
         client.start();
-        setProperlyConfigured(true);
 
+        // start discovery in new thread so it will not delay config admin thread
         new Thread(new Runnable() {
             @Override
             public void run() {
-                client.discoverDevices(BacNetBinding.this, 5000);
+                client.discoverDevices(BacNetBinding.this, discoveryTimeout);
+
+                // upper call blocks thread for discoveryTimeout ms, thus we are safe to set
+                // properly configured here - all known devices should be discovered already
+                setProperlyConfigured(true);
             }
         }).start();
-    }
-
-    protected void update(Property property) {
-        if (client == null) {
-            logger.error("Ignoring update request for property {}, client is not ready yet", property);
-            return;
-        }
-        Encodable value = client.getPropertyValue(property, new BypassConverter());
-        State state = UnDefType.UNDEF;
-        BacNetBindingConfig config = configForEndpoint(property);
-        if (config == null || value == null) {
-            return;
-        }
-
-        state = this.createState(config.itemType, value);
-        eventPublisher.postUpdate(config.itemName, state);
-        logger.debug("Updating item {} to value {} throught property {}", config.itemName, value, property);
     }
 
     private State createState(Class<? extends Item> type, Encodable value) {
@@ -196,10 +213,13 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
         }
     }
 
-    private Property deviceEndpointForConfig(BacNetBindingConfig config) {
+    private Property devicePropertyForConfig(BacNetBindingConfig config) {
         Device device = deviceMap.get(config.deviceId);
         if (device != null) {
             return new Property(device, config.id, config.type);
+        } else {
+            logger.warn("Could not find property {}.{}.{} for item {} cause device was not discovered", config.deviceId,
+                    config.type.name(), config.id, config.itemName);
         }
         return null;
     }
@@ -214,9 +234,9 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
         return null;
     }
 
-    private BacNetBindingConfig configForEndpoint(Property property) {
+    private BacNetBindingConfig configForProperty(Property property) {
         for (BacNetBindingProvider provider : providers) {
-            BacNetBindingConfig config = provider.configForEndpoint(property.getDevice().getInstanceNumber(),
+            BacNetBindingConfig config = provider.configForProperty(property.getDevice().getInstanceNumber(),
                     property.getType(), property.getId());
             if (config != null) {
                 return config;
@@ -230,4 +250,18 @@ public class BacNetBinding extends AbstractActiveBinding<BacNetBindingProvider>
         logger.info("Discovered device " + device);
         deviceMap.put(device.getInstanceNumber(), device);
     }
+
+    @Override
+    public void receiveProperty(Property property, Encodable value) {
+        State state = UnDefType.UNDEF;
+        BacNetBindingConfig config = configForProperty(property);
+        if (config == null || value == null) {
+            return;
+        }
+
+        state = this.createState(config.itemType, value);
+        eventPublisher.postUpdate(config.itemName, state);
+        logger.debug("Updating item {} to value {} throught property {}", config.itemName, value, property);
+    }
+
 }

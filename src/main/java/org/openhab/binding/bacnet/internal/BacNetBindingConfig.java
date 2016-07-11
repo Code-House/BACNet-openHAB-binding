@@ -16,6 +16,7 @@ public class BacNetBindingConfig implements BindingConfig {
     public final Integer deviceId;
     public final Type type;
     public final Integer id;
+    public final long refreshInterval;
 
     private static final Pattern CONFIG_PATTERN = Pattern.compile("^([A-z]+=[^,]+(,|$))+");
 
@@ -26,13 +27,14 @@ public class BacNetBindingConfig implements BindingConfig {
             throw new BindingConfigParseException(
                     "Invalid BacNet config: '" + configString + "'. Expected key1=value1,key2=value2");
         }
-        HashMap<String, String> values = new HashMap<String, String>();
+
+        Map<String, String> values = new HashMap<String, String>();
         for (String item : configString.split(",")) {
             String[] parts = item.split("=");
             if (parts.length != 2) {
                 throw new BindingConfigParseException("Expected key=value in BacNet config");
             }
-            values.put(parts[0], parts[1]);
+            values.put(parts[0].trim(), parts[1].trim());
         }
         return new BacNetBindingConfig(itemName, itemType, values);
     }
@@ -53,6 +55,12 @@ public class BacNetBindingConfig implements BindingConfig {
         this.deviceId = Integer.parseInt(deviceId);
         this.type = parseObjectTypeName(type);
         this.id = Integer.parseInt(id);
+
+        if (values.containsKey("refreshInterval")) {
+            this.refreshInterval = Long.parseLong(values.get("refreshInterval"));
+        } else {
+            this.refreshInterval = 0;
+        }
 
     }
 

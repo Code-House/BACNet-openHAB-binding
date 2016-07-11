@@ -58,7 +58,7 @@ public class BacNetGenericBindingProvider extends AbstractGenericBindingProvider
     }
 
     @Override
-    public BacNetBindingConfig configForEndpoint(int deviceId, Type type, int id) {
+    public BacNetBindingConfig configForProperty(int deviceId, Type type, int id) {
         for (BindingConfig bindingConfig : bindingConfigs.values()) {
             BacNetBindingConfig config = (BacNetBindingConfig) bindingConfig;
             if (config.deviceId == deviceId && config.type == type && config.id == id) {

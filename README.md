@@ -19,8 +19,9 @@ e.g.
 The following keys are available:
 
 * `device` is the instance ID (integer) of the device as configured on your local network (it is *not* the IP address of the device)
-* `type` is the object type. Available types are  `analogInput`, `analogOutput`, `analogValue`, `binaryInput`, `binaryOutput`, `binaryValue`
+* `type` is the object type. Available types are  `analogInput`, `analogOutput`, `analogValue`, `binaryInput`, `binaryOutput`, `binaryValue`, `multiStateInput`, `multiStateOutput`, `multiStateValue`
 * `id`is the instance ID (integer) of the object you want to tie to this openHAB item
+* `refreshInterval` (optional) periods between property read requests
 
 All these properties are coming from bacnet standard. If you don't know yet device id or available properties please contact your device manufacturer and ask for appropriate documentation. Source code contains class named `org.openhab.binding.bacnet.internal.util.DiscoveryMain` which drops all devices and available properties.
 
@@ -31,8 +32,9 @@ This binding have few basic options. Bold items are mandatory
 * port (default 47808)
 * localNetworkNumber (default 0) - bacnet network number
 * localDeviceId (default 1339) - device id used to identify openhab in bacnet network
+* refreshInterval (default 30000) - milliseconds between polling values for configured items
+* discoveryTimeout (default 30000) - specifies how many milliseconds openhab will listen for whois responses from devices. *Note* binding start will be delayed for `discoveryTimeout`.
 
-Currently binding will fetch all items every 30 seconds.
 
 ## How does it work?
 
