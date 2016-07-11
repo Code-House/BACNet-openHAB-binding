@@ -69,6 +69,12 @@ public class BacNetBindingConfig implements BindingConfig {
             return Type.ANALOG_INPUT;
         } else if (name.equals("analogOutput")) {
             return Type.ANALOG_OUTPUT;
+        } else if (name.equals("multiStateInput")) {
+            return Type.MULTISTATE_INPUT;
+        } else if (name.equals("multiStateOutput")) {
+            return Type.MULTISTATE_OUTPUT;
+        } else if (name.equals("multiStateValue")) {
+            return Type.MULTISTATE_VALUE;
         }
         return null;
     }
