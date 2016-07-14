@@ -13,6 +13,8 @@ import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.Type;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.serotonin.bacnet4j.type.Encodable;
 import com.serotonin.bacnet4j.type.enumerated.BinaryPV;
@@ -24,6 +26,9 @@ import com.serotonin.bacnet4j.type.primitive.SignedInteger;
 import com.serotonin.bacnet4j.type.primitive.UnsignedInteger;
 
 public class BacNetValueConverter {
+
+    private final static Logger logger = LoggerFactory.getLogger(BacNetValueConverter.class);
+
     public static State bacNetValueToOpenHabState(Class<? extends Item> type, Encodable value) {
         try {
             if (type.isAssignableFrom(ContactItem.class)) {
@@ -40,7 +45,7 @@ public class BacNetValueConverter {
                 return StringType.valueOf(value.toString());
             }
         } catch (Exception e) {
-            System.err.println(e);
+            logger.error("Could not convert value {} for item type {}", value, type);
             return StringType.valueOf(value.toString());
         }
     }
@@ -51,7 +56,8 @@ public class BacNetValueConverter {
         } else if (value instanceof Boolean) {
             return ((Boolean) value).booleanValue();
         }
-        throw new IllegalArgumentException("Cannot convert BacNet value " + value + " to boolean");
+        throw new IllegalArgumentException(
+                "Cannot convert BacNet value " + value + " " + value.getClass() + " to boolean");
     }
 
     private static float decodeFloat(Encodable value) {
@@ -64,7 +70,8 @@ public class BacNetValueConverter {
         } else if (value instanceof SignedInteger) {
             return ((SignedInteger) value).intValue();
         }
-        throw new IllegalArgumentException("Cannot convert BacNet value " + value + " to float");
+        throw new IllegalArgumentException(
+                "Cannot convert BacNet value " + value + " " + value.getClass() + " to float");
     }
 
     private static int decodeInt(Encodable value) {
@@ -77,7 +84,7 @@ public class BacNetValueConverter {
         } else if (value instanceof SignedInteger) {
             return ((SignedInteger) value).intValue();
         }
-        throw new IllegalArgumentException("Cannot convert BacNet value " + value + " to int");
+        throw new IllegalArgumentException("Cannot convert BacNet value " + value + " " + value.getClass() + " to int");
     }
 
     public static Encodable openHabTypeToBacNetValue(ObjectType type, Type value) {
@@ -87,6 +94,9 @@ public class BacNetValueConverter {
         } else if (type.equals(ObjectType.analogValue) || type.equals(ObjectType.analogOutput)
                 || type.equals(ObjectType.analogInput)) {
             return encodeFloat(value);
+        } else if (type.equals(ObjectType.multiStateValue) || type.equals(ObjectType.multiStateOutput)
+                || type.equals(ObjectType.multiStateInput)) {
+            return encodeUnsigned(value);
         }
         throw new IllegalArgumentException("BacNet object type " + type + " is not implemented");
     }
@@ -95,12 +105,13 @@ public class BacNetValueConverter {
         if (type instanceof OnOffType) {
             return (((OnOffType) type).equals(OnOffType.ON) ? BinaryPV.active : BinaryPV.inactive);
         }
-        throw new IllegalArgumentException("Cannot convert openHAB type " + type + " to boolean");
+        throw new IllegalArgumentException(
+                "Cannot convert openHAB type " + type + " " + type.getClass() + " to boolean");
     }
 
     private static Encodable encodeFloat(Type type) {
         if (type instanceof DecimalType) {
-            return new Real(((PercentType) type).floatValue());
+            return new Real(((DecimalType) type).floatValue());
         } else if (type instanceof StringType) {
             try {
                 return new Real(Float.parseFloat(((StringType) type).toString()));
@@ -110,6 +121,22 @@ public class BacNetValueConverter {
             }
         }
         throw new IllegalArgumentException(
-                "Cannot convert openHAB type " + type.getClass().getName() + " with value " + type + " to integer");
+                "Cannot convert openHAB type " + type + " " + type.getClass() + " to bacnet real");
     }
+
+    private static Encodable encodeUnsigned(Type type) {
+        if (type instanceof DecimalType) {
+            return new UnsignedInteger(((DecimalType) type).intValue());
+        } else if (type instanceof StringType) {
+            try {
+                return new UnsignedInteger(Integer.parseInt(((StringType) type).toString()));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Could not parse number value out of string " + type.toString()
+                        + ". Make sure value is parsable integer");
+            }
+        }
+        throw new IllegalArgumentException("Cannot convert openHAB type " + type.getClass().getName() + " with value "
+                + type + " to bacnet unsigned");
+    }
+
 }
