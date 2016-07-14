@@ -28,8 +28,11 @@ public class WritePropertyTask<T> implements Runnable {
     public void run() {
         try {
             client.setPropertyValue(property, value, converter);
+            logger.trace("Property {} was properly set to value {}", property, value);
         } catch (BacNetClientException e) {
-            logger.error("Could not set value {} for property {}", value, property, e);
+            logger.warn("Could not set value {} for property {}", value, property, e);
+        } catch (Exception e) {
+            logger.error("Unexpected error while setting value {} for property {}", value, property, e);
         }
     }
 
