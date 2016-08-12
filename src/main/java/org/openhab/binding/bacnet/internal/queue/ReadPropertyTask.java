@@ -2,8 +2,8 @@ package org.openhab.binding.bacnet.internal.queue;
 
 import org.code_house.bacnet4j.wrapper.api.BacNetClient;
 import org.code_house.bacnet4j.wrapper.api.BacNetClientException;
+import org.code_house.bacnet4j.wrapper.api.BypassBacnetConverter;
 import org.code_house.bacnet4j.wrapper.api.Property;
-import org.openhab.binding.bacnet.internal.BypassConverter;
 import org.openhab.binding.bacnet.internal.PropertyValueReceiver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,7 +27,7 @@ public class ReadPropertyTask implements Runnable {
     @Override
     public void run() {
         try {
-            Encodable value = client.getPropertyValue(property, new BypassConverter());
+            Encodable value = client.getPropertyValue(property, new BypassBacnetConverter());
             receiver.receiveProperty(property, value);
         } catch (BacNetClientException e) {
             logger.warn("Could not set read property {}", property, e);
